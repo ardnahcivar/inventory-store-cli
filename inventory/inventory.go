@@ -3,13 +3,16 @@ package inventory
 import (
 	"bufio"
 	"fmt"
+	filestorage "inventory-store-cli/filestorage"
 	"inventory-store-cli/models"
+	"inventory-store-cli/utils"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
+var STORE_FILENAME = "inventory-store.txt"
 var MainOptions = []string{
 	"add a item",
 	"remove a item",
@@ -27,9 +30,21 @@ type Inventory struct {
 	Name  string
 }
 
+func (i *Inventory) LoadItems() {
+	items, err := filestorage.ConvertFileItemsToStructs(STORE_FILENAME)
+	fmt.Println(err)
+	fmt.Println("struct items are")
+	fmt.Println(len(items))
+
+	fmt.Println(items)
+	i.Store = items
+}
+
 func (i *Inventory) Add() {
 	item := ReadInventory()
-
+	fileStore := &filestorage.FileStorage{Filename: STORE_FILENAME}
+	itemString := fmt.Sprintf("%s->%v->%v->%s->%v", item.Name, item.Price, item.ManufacturedDate, item.Brand, item.Id)
+	fileStore.Write(itemString)
 	i.Store = append(i.Store, item)
 	fmt.Printf("\nAdded item %+v", item)
 }
@@ -44,12 +59,12 @@ func (i *Inventory) Remove() {
 		switch selectedOption {
 		case "0":
 			fmt.Printf("you have selected to remove it by entering uniqueId")
-			fmt.Printf("please enter the unique id\n")
+			fmt.Printf("\nplease enter the unique id\n")
 			scanner.Scan()
 			itemToBeRemovedId := scanner.Text()
 
 			parsedItemToBeRemovedId, err := strconv.ParseInt(itemToBeRemovedId, 10, 64)
-			ErrorHandler(err)
+			utils.ErrorHandler(err)
 			itemIndex := -1
 			for i, item := range i.Store {
 				if item.Id == parsedItemToBeRemovedId {
@@ -62,6 +77,7 @@ func (i *Inventory) Remove() {
 				fmt.Printf("please check and try again")
 			} else {
 				i.Store = append(i.Store[:itemIndex], i.Store[itemIndex+1:]...)
+				go filestorage.RemoveItemFromFile(STORE_FILENAME, parsedItemToBeRemovedId)
 				fmt.Printf("item with %v id removed successfully", itemToBeRemovedId)
 			}
 		case "1":
@@ -75,6 +91,7 @@ func (i *Inventory) Remove() {
 				wantToRemove := scanner.Text()
 				if strings.ToLower(wantToRemove) == "y" || strings.ToLower(wantToRemove) == "yes" {
 					fmt.Printf("\nyou have decided to remove this item")
+					go filestorage.RemoveItemFromFile(STORE_FILENAME, i.Store[index].Id)
 					i.Store = append(i.Store[:index], i.Store[index+1:]...)
 					fmt.Printf("\nremoved successfully")
 					return
@@ -109,13 +126,6 @@ func RenderMenu(menu []string) {
 
 }
 
-func ErrorHandler(e error) {
-
-	if e != nil {
-		fmt.Println(e)
-	}
-}
-
 func ReadInventory() models.InventoryItem {
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -127,7 +137,7 @@ func ReadInventory() models.InventoryItem {
 	scanner.Scan()
 	inputVal := scanner.Text()
 	price, err := strconv.ParseFloat(inputVal, 64)
-	ErrorHandler(err)
+	utils.ErrorHandler(err)
 	item.Price = price
 	timelLayout := "2006-01-02 15:04:05"
 	fmt.Printf("\nenter the manufactured date (format %v), if you omit it, current time will be considerd", timelLayout)
@@ -137,14 +147,10 @@ func ReadInventory() models.InventoryItem {
 	if manufTime == "" && len(manufTime) == 0 {
 		currTime := time.Now()
 		formattedTime := currTime.Format(timelLayout)
-		parsedManufTime, err := time.Parse(timelLayout, formattedTime)
-		item.ManufacturedDate = parsedManufTime
-		ErrorHandler(err)
+		item.ManufacturedDate = utils.ConvertStringToTime(formattedTime)
 
 	} else {
-		parsedManufTime, err := time.Parse(timelLayout, manufTime)
-		item.ManufacturedDate = parsedManufTime
-		ErrorHandler(err)
+		item.ManufacturedDate = utils.ConvertStringToTime(manufTime)
 	}
 
 	fmt.Println("please enter the brand name")
@@ -159,7 +165,7 @@ func ReadInventory() models.InventoryItem {
 
 func CreateStore() Inventory {
 	store := Inventory{}
-
+	store.LoadItems()
 	fmt.Println(store)
 
 	return store
